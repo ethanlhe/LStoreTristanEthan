@@ -3,12 +3,15 @@
 import os
 import threading
 import copy
+import pickle
 from lstore.index import Index
 from lstore.physical_page import PhysicalPage
 import lstore.config as Config
 from lstore.page_range import PageRange
 from lstore.disk import DISK
 from lstore.record import Record, RID
+import threading
+
 
 
 class Table:
@@ -21,11 +24,13 @@ class Table:
     def __init__(
         self, table_dir_path: str, num_columns: int, key_index: int, num_records: int
     ) -> None:
+        self.table_name: str = os.path.basename(table_dir_path)
         self.table_dir_path: str = table_dir_path
         self.num_columns: int = num_columns
         self.key_index: int = key_index
         # self.key_column:int        = Config.META_DATA_NUM_COLUMNS + key_index
         self.num_records: int = num_records
+        self.lock_manager = {}
 
         self.index: Index = Index(
             table_dir_path=table_dir_path,
@@ -67,18 +72,23 @@ class Table:
     def load_page_ranges(self):
         """load page ranges from disk"""
         page_range_dirs = [
-            os.path.join(self.table_dir_path, _)
-            for _ in os.listdir(self.table_dir_path)
-            if os.path.isdir(os.path.join(self.table_dir_path, _))
+            os.path.join(self.table_dir_path, dir_name)
+            for dir_name in os.listdir(self.table_dir_path)
+            if os.path.isdir(os.path.join(self.table_dir_path, dir_name)) and dir_name.startswith("PR")
         ]
         for page_range_dir in page_range_dirs:
-            page_range_index = int(os.path.basename(page_range_dir).removeprefix("PR"))
-            metadata = DISK.read_metadata_from_disk(self.table_dir_path)
-            self.page_ranges[page_range_index] = PageRange(
-                page_range_dir_path=metadata["page_range_dir_path"],
-                page_range_index=metadata["page_range_index"],
-                tps_index=metadata["tps_index"],
-            )
+                # Read the metadata for each page range directory
+                metadata_path = os.path.join(page_range_dir, "metadata.pkl")
+                if not os.path.exists(metadata_path):
+                    continue  # Skip if metadata file does not exist
+                with open(metadata_path, 'rb') as file:
+                    metadata = pickle.load(file)
+                page_range_index = metadata["page_range_index"]
+                self.page_ranges[page_range_index] = PageRange(
+                    page_range_dir_path=page_range_dir,
+                    page_range_index=page_range_index,
+                    tps_index=metadata["tps_index"],
+                )
 
     def create_page_range(self, page_range_index: int) -> None:
         """
@@ -581,3 +591,4 @@ class Table:
         """
         # TODO
         pass
+        

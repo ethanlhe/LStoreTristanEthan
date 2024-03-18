@@ -12,7 +12,7 @@ class Database:
 
     def __init__(self) -> None:
         self.db_dir_path: str = None
-        self.tables: dict[str, Table] = None
+        self.tables: dict[str, Table] = {}
 
     def open(self, db_dir_path: str) -> None:
         """
@@ -36,8 +36,10 @@ class Database:
                 if os.path.isdir(os.path.join(db_dir_path, _))
             ]
             for table_dir in table_dirs:
-                metadata = dict(pickle.loads(os.path.join(table_dir, "metadata.pkl")))
-                self.tables[metadata["table_dir_path"]] = Table(
+                metadata_path = os.path.join(table_dir, "metadata.pkl")
+                with open(metadata_path, 'rb') as file:  # 'rb' mode to read as bytes
+                    metadata = pickle.loads(file.read())
+                self.tables[metadata["table_name"]] = Table(
                     metadata["table_dir_path"],
                     metadata["num_columns"],
                     metadata["key_index"],
@@ -50,14 +52,24 @@ class Database:
 
         If no database found, raise a ValueError.
         """
-
         if self.db_dir_path is None:
-            raise ValueError
+            raise ValueError("No database is currently open.")
 
+        for table_name, table in self.tables.items():
+            # Assuming each table object has a method to return its metadata as a dictionary
+            metadata = {
+                "table_name": table_name,
+                "table_dir_path": table.table_dir_path,
+                "num_columns": table.num_columns,
+                "key_index": table.key_index,
+                "num_records": table.num_records,
+            }
+            # Assuming DISK.write_metadata_to_disk writes the metadata dictionary to a file named 'metadata.pkl' in the table's directory
+            DISK.write_metadata_to_disk(table.table_dir_path, metadata)
+
+        # Optionally, clear the tables dictionary if you're closing the database
+        self.tables.clear()
         self.db_dir_path = None
-        # self.disk = None
-        for table in self.tables.values():
-            table.close()
 
     def create_table(self, table_name: str, num_columns: int, key_index: int) -> Table:
         """
@@ -75,6 +87,7 @@ class Database:
 
         # save metadata of table
         metadata = {
+            "table_name": table_name,
             "table_dir_path": table_dir_path,
             "num_columns": num_columns,
             "key_index": key_index,
@@ -86,7 +99,7 @@ class Database:
         self.tables[table_name] = Table(table_dir_path, num_columns, key_index, 0)
         # print(f"Table {table_name} created.")
         return self.tables[table_name]
-
+    
     def drop_table(self, table_name: str) -> None:
         """
         Delete the specified table.
@@ -107,6 +120,7 @@ class Database:
         If a table isn't found, it raises a ValueError.
         """
 
-        if not table_name in self.tables:
-            raise ValueError
-        return self.tables[table_name]
+        if table_name in self.tables:
+            return self.tables[table_name]
+        else:
+            raise ValueError(f"Table '{table_name}' not found.")

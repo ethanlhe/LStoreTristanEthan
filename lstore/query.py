@@ -29,6 +29,7 @@ class Query:
 
         for rid in rids:
             rid = RID(rid=rid)
+            print(rid)
             self.table.delete_record(rid)
 
         return True
@@ -61,13 +62,15 @@ class Query:
         # Assume that select will never be called on a key that doesn't exist
         """
         rids = self.table.index.locate(search_key, search_key_index)
+        print("Retrieved RIDs:", rids)  # Debugging statement
+        
 
         records_list = list()
         try:
             for rid in rids:
-                rid = RID(rid=rid)
-                data_columns = self.table.select(rid=rid)
-
+                for rid in rids:
+                    rid = RID(rid=rid)
+                    data_columns = self.table.select(rid=rid)
                 filtered_list = [
                     data_columns[i]
                     for i in range(len(data_columns))
@@ -78,11 +81,13 @@ class Query:
                 filtered_record = Record(
                     rid=rid, key=self.table.key_index, columns=filtered_list
                 )
-                records_list.append(filtered_record)
+                records_list.append(filtered_record.get_values())
+                print("Final Records List:", records_list)  # Debugging statement
         except ValueError:
-            return False
-
+            return []
+        
         return records_list
+    
 
         # TODO: implement TPL record locking
 

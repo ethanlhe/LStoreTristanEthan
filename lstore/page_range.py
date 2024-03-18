@@ -61,7 +61,8 @@ class PageRange:
             and _.startswith("BP")
         ]
         for base_page_dir in base_page_dirs:
-            base_page_index = int(base_page_dir.removeprefix("BP"))
+            base_page_dir_name = os.path.basename(base_page_dir)
+            base_page_index = int(base_page_dir_name.removeprefix("BP"))
             metadata = DISK.read_metadata_from_disk(base_page_dir)
             self.base_pages[base_page_index] = BasePage(
                 base_page_dir_path=metadata["base_page_dir_path"],
@@ -76,7 +77,10 @@ class PageRange:
             and _.startswith("TP")
         ]
         for tail_page_dir in tail_page_dirs:
-            tail_page_index = int(tail_page_dir.removeprefix("TP"))
+            # Assuming tail_page_dir is a path, first get the tail directory name
+            tail_page_dir_name = os.path.basename(tail_page_dir)
+            # Now remove the prefix and convert to int
+            tail_page_index = int(tail_page_dir_name.removeprefix("TP"))
             metadata = DISK.read_metadata_from_disk(tail_page_dir)
             self.tail_pages[tail_page_index] = TailPage(
                 metadata["tail_page_dir_path"], metadata["tail_page_index"]
@@ -178,7 +182,7 @@ class PageRange:
             return self.base_pages[base_page_index].get_data(rid=rid)
 
         else:
-            tail_page_index = rid.get_tail_page_index()
+            tail_page_index = abs(rid.get_tail_page_index())
             # Check if tail page index is in tail pages dictionary
             if tail_page_index not in self.tail_pages:
                 raise ValueError("Tail page index not found.")
