@@ -3,15 +3,13 @@ from lstore.index import Index
 from lstore.lock import Locking
 
 class Transaction:
+
     """
     # Creates a transaction object.
     """
     def __init__(self):
         self.queries = []
-        self.target_table = None
-        self.shared_locks_held = set()
-        self.exclusive_locks_held = set()
-        self.new_locks_created = set()
+        self.locks = {}  # Maps re
 
     """
     # Adds the given query to this transaction
@@ -21,41 +19,50 @@ class Transaction:
     # t.add_query(q.update, grades_table, 0, *[None, 1, None, 2, None])
     """
     def add_query(self, query, table, *args):
-        self.queries.append((query, args))
-        if not self.table:
-            self.target_table = table
+        self.queries.append((query, table, args))
+        record_id = args[0]
+        if record_id not in self.locks:
+            self.locks[record_id] = Locking()
 
 
+    # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
-        for arguments in self.queries:
-            key = arguments[0]  # Presume the first argument is the record key
-            if key not in self.target_table.lock_manager:
-                self.target_table.lock_manager[key] = Locking()
-                self.new_locks_created.add(key)
-            
-            if key not in self.exclusive_locks_held and key not in self.new_locks_created:
-                lock_manager = self.target_table.lock_manager[key]
-                if lock_manager.acquire_write_lock():
-                    self.exclusive_locks_held.add(key)
-                else:
-                    return self.rollback()
-    
+        for query, args in self.queries:
+            record_id = args[0]  # Assuming the first argument is the record ID
+            if record_id not in self.locks:
+                self.locks[record_id] = Locking()
+            lock = self.locks[record_id]
+            # Acquire the appropriate lock
+            if query.__name__ == "select":
+                if not lock.acquire_read_lock():
+                    return self.abort()
+            else:
+                if not lock.acquire_write_lock():
+                    return self.abort()
+            # Execute the query
+            result = query(*args)
+            if result == False:
+                return self.abort()
+        return self.commit()
 
     def abort(self):
         # Release all locks held by this transaction
-        for record_id in self.locks_held:
-            self.target_table.lock_manager.release_lock(self)
-            # TODO Implement release lock, table methods
-        self.locks_held = []
-  
+        for record_id, lock in self.locks.items():
+            if lock.is_writer_active:
+                lock.release_write_lock()
+            else:
+                lock.release_read_lock()
+        # Additional logic to undo changes can be added here
         return False
-    
+
+
 
     def commit(self):
-        for record_id in self.locks_held:
-            self.table.lock_manager.release_lock(record_id, self)
-        self.locks_held = []
-        print("Transaction committed")
-
+        for record_id, lock in self.locks.items():
+            if lock.is_writer_active:
+                lock.release_write_lock()
+            else:
+                lock.release_read_lock()
         return True
+
     
